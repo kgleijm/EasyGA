@@ -1,4 +1,5 @@
 import copy
+import json
 import os.path
 from abc import ABC, abstractmethod
 import random as r
@@ -8,17 +9,21 @@ import sqlite3
 
 class Individual:
 
+    IDCount = 0
+
     class Gen:
         def __init__(self, amountOfOptions):
             self.amountOfOptions = amountOfOptions
             self.options = [r.random() for _ in range(self.amountOfOptions)]
 
-        def mutate(self):
-            self.options = [r.random() for _ in range(self.amountOfOptions)]
+        def mutate(self, chance):
+            self.options = [r.random() if r.random() < chance else self.options[i] for i in range(self.amountOfOptions)]
 
 
 
     def __init__(self, amountOfGenes, amountOfOptions):
+        self.ID = 0
+        self.getID()
         self.genome = []
         self.fitness = 0.001
         self.generation = 0
@@ -31,8 +36,14 @@ class Individual:
     def mutate(self, chance):
         for gen in self.genome:
             if r.random() < chance:
-                gen.mutate()
+                gen.mutate(chance)
 
+    def print(self):
+        print(f"Individual(ID: {self.ID}, Generation: {self.generation}, Fitness: {self.fitness}, Genome: {GeneticAlgorithm.HelperFunctions.convertGenomeToListOfFloats(self.genome)})")
+
+    def getID(self):
+        self.ID = Individual.IDCount
+        Individual.IDCount += 1
 
 class GeneticAlgorithm:
 
@@ -60,6 +71,7 @@ class GeneticAlgorithm:
         self.crossOverGenPercentage = crossOverGenPercentage
         self.mutationChance = mutationChance
         self.elitism = elitism
+        self.highestNotedFitness = 0.0
 
         # Test essential functioning
         GeneticAlgorithm.DataManagement.Test(experimentName)
@@ -72,10 +84,12 @@ class GeneticAlgorithm:
         """Function containing core logic of the genetic algorithm"""
         # Sort old population and initialize empty new population
         self.population.sort(key=lambda i: i.fitness, reverse=True)
+
+        print("\n")
+        GeneticAlgorithm.HelperFunctions.printPopulation(self.population)
+        print("current average fitness", GeneticAlgorithm.HelperFunctions.getAverageFitnessOfPopulation(self.population))
+
         newPopulation = []
-
-
-        print("len(population):", len(self.population))
 
         elites = []
         # Perform elitism
@@ -99,6 +113,7 @@ class GeneticAlgorithm:
         # Determine fitness of Individuals
         self.determineFitnessForIndividuals(newPopulation)
 
+        self.population = newPopulation
 
 
     def crossOverIndividualsByChance(self, parents: list[Individual, Individual], chance: float, percentageOfGenes: float) -> list[Individual, Individual]:
@@ -109,8 +124,15 @@ class GeneticAlgorithm:
             for i in range(len(childA.genome)):
                 if r.random() < percentageOfGenes:
                     tempGene = childA.genome[i]
+
                     childA.genome[i] = childB.genome[i]
+                    childA.generation += 1
+                    childA.getID()
+
                     childB.genome[i] = tempGene
+                    childB.generation += 1
+                    childB.getID()
+
 
         return [childA, childB]
 
@@ -121,6 +143,9 @@ class GeneticAlgorithm:
     def determineFitnessForIndividuals(self, individuals: list[Individual]):
         for individual in individuals:
             individual.fitness = self.fitnessDeterminationFunction(GeneticAlgorithm.HelperFunctions.convertGenomeToListOfFloats(individual.genome))
+            if individual.fitness > self.highestNotedFitness:
+                self.highestNotedFitness = individual.fitness
+                GeneticAlgorithm.DataManagement.saveGenome(self.experimentName, GeneticAlgorithm.HelperFunctions.convertGenomeToListOfFloats(individual.genome), individual)
 
 
     def run(self):
@@ -137,9 +162,10 @@ class GeneticAlgorithm:
         # Fill initial population with best individuals from database
         for rawIndividual in existingFitPopulation:
             newIndividual = Individual(amountOfGenes=self.amountOfDataInputs, amountOfOptions=self.amountOfOutcomeOptions)
-            newIndividual.generation = rawIndividual[0]
-            newIndividual.fitness = rawIndividual[1]
-            newIndividual.genome = rawIndividual[2].split(",")
+            newIndividual.ID = rawIndividual[0]
+            newIndividual.generation = rawIndividual[1]
+            newIndividual.fitness = rawIndividual[2]
+            newIndividual.genome = GeneticAlgorithm.HelperFunctions.convertListOfFloatsToGenome(json.loads(rawIndividual[3]))
             initialPopulation.append(newIndividual)
 
         # Top up initial population if not enough Individuals could be pulled from the database
@@ -216,10 +242,19 @@ class GeneticAlgorithm:
                 print("DataManagement Test successful")
 
         @staticmethod
-        def saveGenomeIfValuable(experimentName: str, genome: list[float]):
+        def saveGenome(experimentName: str, genome: list[list[float]], individual: Individual):
             """Checks if genome has a higher fitness than all know genomes and saves it if true"""
-            # TODO IMPLEMENT
-            pass
+            genomeString = str(genome)
+            print("genomestring:", genomeString)
+            sql = f"INSERT INTO genomes(ID, generation, fitness, genome)" \
+                  f"VALUES({individual.ID},{individual.generation},{individual.fitness},'{genomeString}')"
+
+            path = GeneticAlgorithm.DataManagement.getDBPath(experimentName)
+            with sqlite3.connect(path) as con:
+                cur = con.cursor()
+                cur.execute(sql)
+                cur.close()
+
 
         @staticmethod
         def queryNBest(experimentName: str, n: int):
@@ -230,7 +265,10 @@ class GeneticAlgorithm:
             ORDER BY fitness DESC
             LIMIT {n}"""
 
-            return GeneticAlgorithm.DataManagement.getQueryResult(experimentName, sql)
+            result = GeneticAlgorithm.DataManagement.getQueryResult(experimentName, sql)
+            print(result)
+
+            return result
 
     class HelperFunctions:
 
@@ -250,8 +288,17 @@ class GeneticAlgorithm:
             return output
 
         @staticmethod
-        def convertGenomeToListOfFloats(genome: list[Individual.Gen]):
+        def convertGenomeToListOfFloats(genome: list[Individual.Gen]) -> list[list[float]]:
             return [gen.options for gen in genome]
+
+        @staticmethod
+        def convertListOfFloatsToGenome(listOfFloats: list[list[float]]) -> list[Individual.Gen]:
+            output = []
+            for listOF in listOfFloats:
+                gen = Individual.Gen(amountOfOptions=len(listOF))
+                gen.options = listOF
+                output.append(gen)
+            return output
 
         @staticmethod
         def getSumOfOptions(options: list[list[float]]):
@@ -261,6 +308,14 @@ class GeneticAlgorithm:
                     res[i] += option[i]
             return res
 
+        @staticmethod
+        def getAverageFitnessOfPopulation(population: list[Individual]):
+            return sum(individual.fitness for individual in population)/len(population)
+
+        @staticmethod
+        def printPopulation(population: list[Individual]):
+            for individual in population:
+                individual.print()
 
         # TODO determine if function is feasible
         # @staticmethod
@@ -269,9 +324,11 @@ class GeneticAlgorithm:
         #     genomeTotalForOption = [getGenSumOfIndex(index) for index in range(len(self.genome))]
 
 
+
+
 def fitnessFunc(inp: list[list[float]]):
     result = GeneticAlgorithm.HelperFunctions.getSumOfOptions(inp)
-    fitness = result[1] - result[0]
+    fitness = result[1] - result[0]/len(inp)
     return fitness
 
-GA = GeneticAlgorithm("Development", fitnessFunc, 3, 2)
+GA = GeneticAlgorithm("Development", fitnessFunc, 100, 2, mutationChance=0.05)
