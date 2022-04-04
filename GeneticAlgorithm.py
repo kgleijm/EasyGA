@@ -139,6 +139,8 @@ class GeneticAlgorithm:
     def determineFitnessForIndividuals(self, individuals: list[Individual]):
         for individual in individuals:
             individual.fitness = self.fitnessDeterminationFunction(GeneticAlgorithm.InternalFunctions.convertGenomeToListOfFloats(individual.genome))
+            if individual.fitness == 0.0:
+                individual.fitness = 0.000001
             if individual.fitness > self.highestNotedFitness:
                 self.highestNotedFitness = individual.fitness
                 GeneticAlgorithm.DataManagement.saveGenome(self.experimentName, GeneticAlgorithm.InternalFunctions.convertGenomeToListOfFloats(individual.genome), individual)
@@ -301,12 +303,13 @@ class GeneticAlgorithm:
             for individual in population:
                 individual.print()
 
-        # TODO determine if function is feasible
-        # @staticmethod
-        # def choose(self, data):
-        #     getGenSumOfIndex = lambda index: sum([gen.option[index] for gen in self.genome])
-        #     genomeTotalForOption = [getGenSumOfIndex(index) for index in range(len(self.genome))]
 
+    class HelperFunctions:
+
+        @staticmethod
+        def choose(self, data):
+            getGenSumOfIndex = lambda index: sum([gen.option[index] for gen in self.genome])
+            genomeTotalForOption = [getGenSumOfIndex(index) for index in range(len(self.genome))]
 
 """
 ###### Genetic Algorithm ######
