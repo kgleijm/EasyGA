@@ -19,8 +19,6 @@ class Individual:
         def mutate(self, chance):
             self.options = [r.random() if r.random() < chance else self.options[i] for i in range(self.amountOfOptions)]
 
-
-
     def __init__(self, amountOfGenes, amountOfOptions):
         self.ID = 0
         self.getID()
@@ -32,14 +30,13 @@ class Individual:
 
         self.genome = [Individual.Gen(amountOfOptions) for _ in range(amountOfGenes)]
 
-
     def mutate(self, chance):
         for gen in self.genome:
             if r.random() < chance:
                 gen.mutate(chance)
 
     def print(self):
-        print(f"Individual(ID: {self.ID}, Generation: {self.generation}, Fitness: {self.fitness}, Genome: {GeneticAlgorithm.HelperFunctions.convertGenomeToListOfFloats(self.genome)})")
+        print(f"Individual(ID: {self.ID}, Generation: {self.generation}, Fitness: {self.fitness}, Genome: {GeneticAlgorithm.InternalFunctions.convertGenomeToListOfFloats(self.genome)})")
 
     def getID(self):
         self.ID = Individual.IDCount
@@ -86,8 +83,8 @@ class GeneticAlgorithm:
         self.population.sort(key=lambda i: i.fitness, reverse=True)
 
         print("\n")
-        GeneticAlgorithm.HelperFunctions.printPopulation(self.population)
-        print("current average fitness", GeneticAlgorithm.HelperFunctions.getAverageFitnessOfPopulation(self.population))
+        GeneticAlgorithm.InternalFunctions.printPopulation(self.population)
+        print("current average fitness", GeneticAlgorithm.InternalFunctions.getAverageFitnessOfPopulation(self.population))
 
         newPopulation = []
 
@@ -99,7 +96,7 @@ class GeneticAlgorithm:
 
         # Cross over Individuals
         while len(newPopulation) < self.populationSize:
-            sample = GeneticAlgorithm.HelperFunctions.pickWeightedSampleByFitness(self.population, 2)
+            sample = GeneticAlgorithm.InternalFunctions.pickWeightedSampleByFitness(self.population, 2)
             crossedOverSample = self.crossOverIndividualsByChance(sample, self.crossoverChance, self.crossOverGenPercentage)
             for i in crossedOverSample:
                 if len(newPopulation) < self.populationSize:
@@ -114,7 +111,6 @@ class GeneticAlgorithm:
         self.determineFitnessForIndividuals(newPopulation)
 
         self.population = newPopulation
-
 
     def crossOverIndividualsByChance(self, parents: list[Individual, Individual], chance: float, percentageOfGenes: float) -> list[Individual, Individual]:
         childA = copy.deepcopy(parents[0])
@@ -142,11 +138,10 @@ class GeneticAlgorithm:
 
     def determineFitnessForIndividuals(self, individuals: list[Individual]):
         for individual in individuals:
-            individual.fitness = self.fitnessDeterminationFunction(GeneticAlgorithm.HelperFunctions.convertGenomeToListOfFloats(individual.genome))
+            individual.fitness = self.fitnessDeterminationFunction(GeneticAlgorithm.InternalFunctions.convertGenomeToListOfFloats(individual.genome))
             if individual.fitness > self.highestNotedFitness:
                 self.highestNotedFitness = individual.fitness
-                GeneticAlgorithm.DataManagement.saveGenome(self.experimentName, GeneticAlgorithm.HelperFunctions.convertGenomeToListOfFloats(individual.genome), individual)
-
+                GeneticAlgorithm.DataManagement.saveGenome(self.experimentName, GeneticAlgorithm.InternalFunctions.convertGenomeToListOfFloats(individual.genome), individual)
 
     def run(self):
         while self.running:
@@ -165,7 +160,7 @@ class GeneticAlgorithm:
             newIndividual.ID = rawIndividual[0]
             newIndividual.generation = rawIndividual[1]
             newIndividual.fitness = rawIndividual[2]
-            newIndividual.genome = GeneticAlgorithm.HelperFunctions.convertListOfFloatsToGenome(json.loads(rawIndividual[3]))
+            newIndividual.genome = GeneticAlgorithm.InternalFunctions.convertListOfFloatsToGenome(json.loads(rawIndividual[3]))
             initialPopulation.append(newIndividual)
 
         # Top up initial population if not enough Individuals could be pulled from the database
@@ -176,21 +171,6 @@ class GeneticAlgorithm:
         self.population.sort(key=lambda i: i.fitness, reverse=True)
 
         print(f"initial setup added {self.populationSize - len(initialPopulation)} of {self.populationSize} Individuals")
-
-    class InternalFunctions:
-
-        @staticmethod
-        def mutateIndividual(self, individual: Individual):
-            pass
-
-        @staticmethod
-        def crossOverIndividuals(self, individuals: Tuple[Individual, Individual]):
-            pass
-
-        @staticmethod
-        def determineFitness(fitnessDeterminationFunction: Callable[[list[Individual.Gen]], float], individual: Individual):
-            """Function applies the fitness determination function to the genome and saves the result in the designated places"""
-            individual.fitness = fitnessDeterminationFunction(individual.genome)
 
     class DataManagement:
 
@@ -255,7 +235,6 @@ class GeneticAlgorithm:
                 cur.execute(sql)
                 cur.close()
 
-
         @staticmethod
         def queryNBest(experimentName: str, n: int):
             """Returns n genomes with the highest fitness.
@@ -270,7 +249,12 @@ class GeneticAlgorithm:
 
             return result
 
-    class HelperFunctions:
+    class InternalFunctions:
+
+        @staticmethod
+        def determineFitness(fitnessDeterminationFunction: Callable[[list[Individual.Gen]], float], individual: Individual):
+            """Function applies the fitness determination function to the genome and saves the result in the designated places"""
+            individual.fitness = fitnessDeterminationFunction(individual.genome)
 
         @staticmethod
         def pickWeightedSampleByFitness(population: list[Individual], n=2) -> list[Individual]:
@@ -324,11 +308,23 @@ class GeneticAlgorithm:
         #     genomeTotalForOption = [getGenSumOfIndex(index) for index in range(len(self.genome))]
 
 
+"""
+###### Genetic Algorithm ######
+This specific implementation of a genetic algorithm was designed for having
+a set of inputs of a fixed size generating an output of a fixed size.
+this input could be a state of a game or a video feed requiring to be distilled to an action
 
 
-def fitnessFunc(inp: list[list[float]]):
-    result = GeneticAlgorithm.HelperFunctions.getSumOfOptions(inp)
-    fitness = result[1] - result[0]/len(inp)
-    return fitness
+###### Fitness functions ######
+The fitness function needs to be a function that takes a list of lists of floats
+The outer list is a list of genomes (A simplified representation of the Genome object)
+this inner list of floats represent how strong the genome votes for a certain outcome.
 
-GA = GeneticAlgorithm("Development", fitnessFunc, 100, 2, mutationChance=0.05)
+
+###### Implementation ######
+Although the Genetic Algorithm class takes care of crossing over, mutating and keeping track of genomes
+A separate algorithm should take care of determining the fitness. 
+An example of a fitness function can be a simulation of a game using the genome as action preferences of a game AI
+"""
+
+
