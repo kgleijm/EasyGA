@@ -57,6 +57,7 @@ class GeneticAlgorithm:
         And a fitness determination function that should provide the fitness of a certain genome.
         """
 
+        # Functional configurations
         self.experimentName = experimentName
         self.fitnessDeterminationFunction = fitnessDeterminationFunction
         self.populationSize = populationSize
@@ -70,21 +71,27 @@ class GeneticAlgorithm:
         self.elitism = elitism
         self.highestNotedFitness = 0.0
 
+        # usability configurations
+        self.printEachGenerationInConsole = False
+        self.printCurrentAverageFitnessInConsole = True
+
         # Test essential functioning
         GeneticAlgorithm.DataManagement.Test(experimentName)
 
         self.initialSetup()
 
-        self.run()
 
     def tick(self):
         """Function containing core logic of the genetic algorithm"""
         # Sort old population and initialize empty new population
         self.population.sort(key=lambda i: i.fitness, reverse=True)
 
-        print("\n")
-        GeneticAlgorithm.InternalFunctions.printPopulation(self.population)
-        print("current average fitness", GeneticAlgorithm.InternalFunctions.getAverageFitnessOfPopulation(self.population))
+        if self.printEachGenerationInConsole:
+            print("\n")
+            GeneticAlgorithm.InternalFunctions.printPopulation(self.population)
+
+        if self.printCurrentAverageFitnessInConsole:
+            print("current average fitness", GeneticAlgorithm.InternalFunctions.getAverageFitnessOfPopulation(self.population))
 
         newPopulation = []
 
@@ -139,8 +146,11 @@ class GeneticAlgorithm:
     def determineFitnessForIndividuals(self, individuals: list[Individual]):
         for individual in individuals:
             individual.fitness = self.fitnessDeterminationFunction(GeneticAlgorithm.InternalFunctions.convertGenomeToListOfFloats(individual.genome))
+
+            # Stops a bug from happening that causes experiment to freeze (Issue not yet investigated)
             if individual.fitness == 0.0:
                 individual.fitness = 0.000001
+
             if individual.fitness > self.highestNotedFitness:
                 self.highestNotedFitness = individual.fitness
                 GeneticAlgorithm.DataManagement.saveGenome(self.experimentName, GeneticAlgorithm.InternalFunctions.convertGenomeToListOfFloats(individual.genome), individual)
@@ -227,7 +237,6 @@ class GeneticAlgorithm:
         def saveGenome(experimentName: str, genome: list[list[float]], individual: Individual):
             """Checks if genome has a higher fitness than all know genomes and saves it if true"""
             genomeString = str(genome)
-            print("genomestring:", genomeString)
             sql = f"INSERT INTO genomes(ID, generation, fitness, genome)" \
                   f"VALUES({individual.ID},{individual.generation},{individual.fitness},'{genomeString}')"
 
@@ -307,9 +316,38 @@ class GeneticAlgorithm:
     class HelperFunctions:
 
         @staticmethod
-        def choose(self, data):
-            getGenSumOfIndex = lambda index: sum([gen.option[index] for gen in self.genome])
-            genomeTotalForOption = [getGenSumOfIndex(index) for index in range(len(self.genome))]
+        def choose(genomeAsListOfListsOfFloats: list[list[float]], observations: list[float], possibilities: list[float]):
+            """
+            function takes
+            genome as a list of floats
+
+            a list of floats of observations (0-1).
+            this list needs to have the same length as the genome.
+
+            a list of floats possibilities (0-1).
+            this is a list of whether an action will be possible or not.
+            needs to be the same length as the amount of options
+
+            function returns
+            number of the option corresponding to the choice (0-len(Options found in the genome))
+
+
+            ###### Calculation for 5 observations to 3 options ######
+
+            Obs  *      Gen               *  poss
+            _
+            0.2     0.1 0.2 0.4
+            0.5     0.3 0.6 0.1      1.6     1.0      1.6
+            0.1  *  0.7 0.7 0.7  ->  2.3  *  0.0  ->  0.0
+            0.1     0.4 0.5 0.1      1.7     1.0      1.7  -> max -> return index
+            0.7     0.1 0.3 0.1
+            """
+
+            # function that gets the total vote for each option
+            getGenSumOfIndex = lambda indexOfVote: sum([genomeAsListOfListsOfFloats[gen][indexOfVote] * observations[gen] for gen in range(len(genomeAsListOfListsOfFloats))])
+            # get a list of totals for each option
+            genomeTotalForOption = [getGenSumOfIndex(index) * possibilities[index] for index in range(len(genomeAsListOfListsOfFloats[0]))]
+            return genomeTotalForOption.index(max(genomeTotalForOption))
 
 """
 ###### Genetic Algorithm ######
